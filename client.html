@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphQL 클라이언트 예제</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .book-list {
+            margin-top: 20px;
+        }
+        .book-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, button {
+            padding: 8px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+        .tab.active {
+            background-color: #ddd;
+            border-bottom: none;
+        }
+        .content {
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>GraphQL 책 관리 시스템</h1>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('list')">책 목록</div>
+        <div class="tab" onclick="showTab('add')">책 추가</div>
+        <div class="tab" onclick="showTab('edit')">책 수정</div>
+    </div>
+
+    <!-- 책 목록 -->
+    <div id="list-tab" class="content active">
+        <h2>책 목록</h2>
+        <button onclick="fetchBooks()">새로고침</button>
+        <div id="book-list" class="book-list">
+            <!-- 여기에 책 목록이 표시됩니다 -->
+        </div>
+    </div>
+
+    <!-- 책 추가 -->
+    <div id="add-tab" class="content">
+        <h2>새 책 추가</h2>
+        <div class="form-group">
+            <label for="title">제목:</label>
+            <input type="text" id="title" name="title">
+        </div>
+        <div class="form-group">
+            <label for="author">저자:</label>
+            <input type="text" id="author" name="author">
+        </div>
+        <div class="form-group">
+            <label for="year">출판연도:</label>
+            <input type="number" id="year" name="year">
+        </div>
+        <button onclick="addBook()">추가하기</button>
+        <div id="add-result"></div>
+    </div>
+
+    <!-- 책 수정 -->
+    <div id="edit-tab" class="content">
+        <h2>책 정보 수정</h2>
+        <div class="form-group">
+            <label for="book-id">책 ID:</label>
+            <input type="number" id="book-id" name="book-id">
+            <button onclick="fetchBookById()">책 불러오기</button>
+        </div>
+        <div id="edit-form" style="display:none;">
+            <div class="form-group">
+                <label for="edit-title">제목:</label>
+                <input type="text" id="edit-title" name="edit-title">
+            </div>
+            <div class="form-group">
+                <label for="edit-author">저자:</label>
+                <input type="text" id="edit-author" name="edit-author">
+            </div>
+            <div class="form-group">
+                <label for="edit-year">출판연도:</label>
+                <input type="number" id="edit-year" name="edit-year">
+            </div>
+            <button onclick="updateBook()">수정하기</button>
+            <button onclick="deleteBook()" style="background-color:#f44336;">삭제하기</button>
+        </div>
+        <div id="edit-result"></div>
+    </div>
+
+    <script>
+        // 현재 활성화된 탭 변경
+        function showTab(tabName) {
+            // 모든 탭과 콘텐츠 비활성화
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.content').forEach(content => content.classList.remove('active'));
+            
+            // 선택한 탭과 콘텐츠 활성화
+            document.querySelector(`.tab:nth-child(${tabName === 'list' ? 1 : tabName === 'add' ? 2 : 3})`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // GraphQL 쿼리 실행 함수
+        async function executeGraphQL(query, variables = {}) {
+            try {
+                const response = await fetch('http://localhost:4000/graphql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query,
+                        variables
+                    })
+                });
+
+                return await response.json();
+            } catch (error) {
+                console.error('GraphQL 요청 오류:', error);
+                return { errors: [{ message: error.message }] };
+            }
+        }
+
+        // 모든 책 가져오기
+        async function fetchBooks() {
+            const query = `
+                query {
+                    books {
+                        id
+                        title
+                        author
+                        publishedYear
+                    }
+                }
+            `;
+
+            const result = await executeGraphQL(query);
+            if (result.errors) {
+                document.getElementById('book-list').innerHTML = `<p>오류: ${result.errors[0].message}</p>`;
+                return;
+            }
+
+            const books = result.data.books;
+            const bookList = document.getElementById('book-list');
+            
+            if (books.length === 0) {
+                bookList.innerHTML = '<p>등록된 책이 없습니다.</p>';
+                return;
+            }
+
+            let html = '';
+            books.forEach(book => {
+                html += `
+                    <div class="book-item">
+                        <h3>${book.title}</h3>
+                        <p>ID: ${book.id}</p>
+                        <p>저자: ${book.author}</p>
+                        <p>출판연도: ${book.publishedYear || '정보 없음'}</p>
+                    </div>
+                `;
+            });
+
+            bookList.innerHTML = html;
+        }
+
+        // 새 책 추가하기
+        async function addBook() {
+            const title = document.getElementById('title').value;
+            const author = document.getElementById('author').value;
+            const year = document.getElementById('year').value;
+
+            if (!title || !author) {
+                document.getElementById('add-result').innerHTML = '<p>제목과 저자는 필수 입력 항목입니다.</p>';
+                return;
+            }
+
+            const mutation = `
+                mutation AddBook($title: String!, $author: String!, $year: Int) {
+                    addBook(title: $title, author: $author, publishedYear: $year) {
+                        id
+                        title
+                        author
+                        publishedYear
+                    }
+                }
+            `;
+
+            const variables = {
+                title,
+                author,
+                year: year ? parseInt(year) : null
+            };
+
+            const result = await executeGraphQL(mutation, variables);
+            if (result.errors) {
+                document.getElementById('add-result').innerHTML = `<p>오류: ${result.errors[0].message}</p>`;
+                return;
+            }
+
+            const book = result.data.addBook;
+            document.getElementById('add-result').innerHTML = `<p>'${book.title}'이(가) 성공적으로 추가되었습니다! (ID: ${book.id})</p>`;
+            
+            // 입력 필드 초기화
+            document.getElementById('title').value = '';
+            document.getElementById('author').value = '';
+            document.getElementById('year').value = '';
+        }
+
+        // ID로 책 정보 가져오기
+        async function fetchBookById() {
+            const id = document.getElementById('book-id').value;
+            
+            if (!id) {
+                document.getElementById('edit-result').innerHTML = '<p>책 ID를 입력해주세요.</p>';
+                return;
+            }
+
+            const query = `
+                query GetBook($id: ID!) {
+                    book(id: $id) {
+                        id
+                        title
+                        author
+                        publishedYear
+                    }
+                }
+            `;
+
+            const variables = { id };
+
+            const result = await executeGraphQL(query, variables);
+            if (result.errors) {
+                document.getElementById('edit-result').innerHTML = `<p>오류: ${result.errors[0].message}</p>`;
+                document.getElementById('edit-form').style.display = 'none';
+                return;
+            }
+
+            const book = result.data.book;
+            if (!book) {
+                document.getElementById('edit-result').innerHTML = `<p>ID ${id}에 해당하는 책을 찾을 수 없습니다.</p>`;
+                document.getElementById('edit-form').style.display = 'none';
+                return;
+            }
+
+            // 수정 폼에 책 정보 표시
+            document.getElementById('edit-title').value = book.title;
+            document.getElementById('edit-author').value = book.author;
+            document.getElementById('edit-year').value = book.publishedYear || '';
+            document.getElementById('edit-form').style.display = 'block';
+            document.getElementById('edit-result').innerHTML = '';
+        }
+
+        // 책 정보 업데이트
+        async function updateBook() {
+            const id = document.getElementById('book-id').value;
+            const title = document.getElementById('edit-title').value;
+            const author = document.getElementById('edit-author').value;
+            const year = document.getElementById('edit-year').value;
+
+            if (!id || !title || !author) {
+                document.getElementById('edit-result').innerHTML = '<p>ID, 제목, 저자는 필수 입력 항목입니다.</p>';
+                return;
+            }
+
+            const mutation = `
+                mutation UpdateBook($id: ID!, $title: String!, $author: String!, $year: Int) {
+                    updateBook(id: $id, title: $title, author: $author, publishedYear: $year) {
+                        id
+                        title
+                        author
+                        publishedYear
+                    }
+                }
+            `;
+
+            const variables = {
+                id,
+                title,
+                author,
+                year: year ? parseInt(year) : null
+            };
+
+            const result = await executeGraphQL(mutation, variables);
+            if (result.errors) {
+                document.getElementById('edit-result').innerHTML = `<p>오류: ${result.errors[0].message}</p>`;
+                return;
+            }
+
+            const book = result.data.updateBook;
+            if (!book) {
+                document.getElementById('edit-result').innerHTML = `<p>ID ${id}에 해당하는 책을 찾을 수 없습니다.</p>`;
+                return;
+            }
+
+            document.getElementById('edit-result').innerHTML = `<p>'${book.title}'의 정보가 성공적으로 업데이트되었습니다!</p>`;
+        }
+
+        // 책 삭제
+        async function deleteBook() {
+            const id = document.getElementById('book-id').value;
+            
+            if (!id) {
+                document.getElementById('edit-result').innerHTML = '<p>책 ID를 입력해주세요.</p>';
+                return;
+            }
+
+            if (!confirm(`ID ${id}의 책을 정말 삭제하시겠습니까?`)) {
+                return;
+            }
+
+            const mutation = `
+                mutation DeleteBook($id: ID!) {
+                    deleteBook(id: $id)
+                }
+            `;
+
+            const variables = { id };
+
+            const result = await executeGraphQL(mutation, variables);
+            if (result.errors) {
+                document.getElementById('edit-result').innerHTML = `<p>오류: ${result.errors[0].message}</p>`;
+                return;
+            }
+
+            const deleted = result.data.deleteBook;
+            if (deleted) {
+                document.getElementById('edit-result').innerHTML = `<p>ID ${id}의 책이 성공적으로 삭제되었습니다.</p>`;
+                document.getElementById('edit-form').style.display = 'none';
+                document.getElementById('book-id').value = '';
+            } else {
+                document.getElementById('edit-result').innerHTML = `<p>ID ${id}에 해당하는 책을 찾을 수 없습니다.</p>`;
+            }
+        }
+
+        // 페이지 로드 시 책 목록 가져오기
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchBooks();
+        });
+    </script>
+</body>
+</html>
